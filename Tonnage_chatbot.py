@@ -1,149 +1,189 @@
 import streamlit as st
+import math
 import matplotlib.pyplot as plt
-import re
+import pandas as pd
 
-st.set_page_config(page_title="Industrial Sheet Metal AI Bot")
-st.title("🤖 Industrial Sheet Metal Engineering Bot")
+st.set_page_config(page_title="AI Sheet Metal Costing Bot")
 
-# -------------------------
-# ADVANCED MATERIAL DATABASE
-# -------------------------
-material_db = {
-    "crca": {"shear": 300, "density": 7850, "aliases": ["en10130", "dc01"]},
-    "s235jr": {"shear": 310, "density": 7850, "aliases": ["en10025"]},
-    "ss304": {"shear": 520, "density": 8000, "aliases": ["en10088", "aisi304"]},
-    "aluminium 5052": {"shear": 210, "density": 2700, "aliases": ["en aw-5052"]},
-    "copper": {"shear": 250, "density": 8960, "aliases": ["cw004a"]}
-}
+# -----------------------------
+# SESSION STATE FOR CHAT MODE
+# -----------------------------
 
-# -------------------------
-# SESSION MEMORY
-# -------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-    st.session_state.context = {}
+if "chat_started" not in st.session_state:
+    st.session_state.chat_started = False
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+st.title("🤖 AI Sheet Metal Costing Assistant")
 
-user_input = st.chat_input("Ask about tonnage, allowances, EN material, scrap %...")
+# -----------------------------
+# CHATBOT START
+# -----------------------------
 
-if user_input:
+if not st.session_state.chat_started:
+    st.write("Hello  👋")
+    st.write("I will help you calculate tonnage, deployed weight & scrap%")
+    if st.button("Start Calculation"):
+        st.session_state.chat_started = True
 
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    text = user_input.lower()
-    ctx = st.session_state.context
+# -----------------------------
+# MAIN FORM AFTER CHAT START
+# -----------------------------
 
-    # -------------------------
-    # MATERIAL DETECTION (WITH EN SUPPORT)
-    # -------------------------
-    for mat, data in material_db.items():
-        if mat in text or any(alias in text for alias in data["aliases"]):
-            ctx["material"] = mat
-            ctx["shear"] = data["shear"]
-            ctx["density"] = data["density"]
+if st.session_state.chat_started:
 
-    # -------------------------
-    # NUMBER EXTRACTION
-    # -------------------------
-    numbers = re.findall(r"\d+\.?\d*", text)
-    numbers = list(map(float, numbers))
+    st.header("📋 Enter Part Details")
 
-    # Auto assign thickness, length, width if 3 numbers found
-    if len(numbers) >= 3:
-        ctx["thickness"] = numbers[0]
-        ctx["length"] = numbers[1]
-        ctx["width"] = numbers[2]
+    # -----------------------------
+    # MATERIAL DATABASE
+    # -----------------------------
 
-    # Scrap %
-    if "%" in text:
-        ctx["scrap_percent"] = numbers[-1]
+    material_db = {
+        "CR Steel": {"density": 7850, "shear": 250},
+        "Stainless Steel 304": {"density": 8000, "shear": 300},
+        "Stainless Steel 430": {"density": 7700, "shear": 275},
+        "Aluminium 5052": {"density": 2700, "shear": 110},
+        "Copper": {"density": 8960, "shear": 210},
+        "Brass": {"density": 8500, "shear": 200}
+    }
 
-    # Allowance override detection
-    if "carriage" in text:
-        ctx["carriage_allowance"] = numbers[-1]
+    length = st.number_input("Part Length (mm)", min_value=0.0)
+    width = st.number_input("Part Width (mm)", min_value=0.0)
+    thickness = st.number_input("Thickness (mm)", min_value=0.0)
 
-    if "stripping" in text:
-        ctx["stripping_allowance"] = numbers[-1]
+    material = st.selectbox("Select Material", list(material_db.keys()))
 
-    # -------------------------
-    # VALIDATION
-    # -------------------------
-    required = ["material", "thickness", "length", "width"]
-    missing = [r for r in required if r not in ctx]
+    auto_fill = st.checkbox("Auto select Shear Strength & Density", value=True)
 
-    if missing:
-        response = f"I still need: {', '.join(missing)}"
+    if auto_fill:
+        shear_strength = material_db[material]["shear"]
+        density = material_db[material]["density"]
+        st.write(f"Shear Strength: {shear_strength} N/mm²")
+        st.write(f"Density: {density} kg/m³")
     else:
-        thickness = ctx["thickness"]
-        length = ctx["length"]
-        width = ctx["width"]
-        shear = ctx["shear"]
-        density = ctx["density"]
+        shear_strength = st.number_input("Shear Strength (N/mm²)", min_value=0.0)
+        density = st.number_input("Material Density (kg/m³)", min_value=0.0)
 
-        # Default allowance logic
-        carriage_allowance = ctx.get("carriage_allowance", round(thickness * 1.5, 2))
-        stripping_allowance = ctx.get("stripping_allowance", round(thickness * 1.2, 2))
+    # Net weight in grams
+    part_net_weight_grams = st.number_input("Part Net Weight (grams)", min_value=0.0)
 
-        strip_width = width + (2 * carriage_allowance)
-        pitch = length + stripping_allowance
+    # -----------------------------
+    # CALCULATE
+    # -----------------------------
 
-        # Tonnage
+    if st.button("Calculate Results"):
+
+        # Convert grams to kg
+        part_net_weight = part_net_weight_grams / 1000
+
+        # ---- TONNAGE ----
         perimeter = ((2 * length) + (2 * width)) * 0.7
-        cutting_force = perimeter * thickness * shear
-        fos = cutting_force * 0.5
+        cutting_force = perimeter * thickness * shear_strength
+        factor_of_safety = cutting_force * 0.5
         stripping_force = cutting_force * 0.4
-        tonnage = (cutting_force + fos + stripping_force) / (1000 * 9.81)
+        total_force = cutting_force + factor_of_safety + stripping_force
+        tonnage = total_force / (1000 * 9.81)
 
-        # Weight
-        strip_area = strip_width * pitch
-        part_area = length * width
+        # ---- STRIP LAYOUT ----
+        carriage_allowance = 5
+        stripping_allowance = 3
 
-        volume_strip = (strip_area * thickness) / 1e9
-        volume_part = (part_area * thickness) / 1e9
+        # Width includes BOTH allowances
+        strip_width = width + ((2 *carriage_allowance)+(2*stripping_allowance ))
 
-        deployed_weight = volume_strip * density
-        part_weight = volume_part * density
+        # Pitch = 2 × thickness (as requested)
+        pitch = 2 * thickness
 
-        scrap_weight = deployed_weight - part_weight
+        # Deployed dimensions include allowances
+        deployed_width = strip_width
+        deployed_length = pitch + length
 
-        # Scrap %
-        scrap_percent = ctx.get("scrap_percent", (scrap_weight / deployed_weight) * 100)
+        # ---- DEPLOYED WEIGHT ----
+        strip_area = deployed_width * deployed_length
+        volume_mm3 = strip_area * thickness
+        volume_m3 = volume_mm3 / 1e9
+        deployed_weight = volume_m3 * density
 
-        response = f"""
-### 📊 Engineering Output
+        scrap_weight = max(deployed_weight - part_net_weight, 0)
+        scrap_percent = (scrap_weight / deployed_weight * 100) if deployed_weight > 0 else 0
 
-Material: {ctx['material'].upper()}  
-Shear Strength: {shear} MPa  
+        # -----------------------------
+        # DISPLAY RESULTS
+        # -----------------------------
 
-Thickness: {thickness} mm  
+        st.subheader("🔹 Results Summary")
+        st.write(f"Required Tonnage: **{tonnage:.2f} Tons**")
+        st.write(f"Deployed Weight per Stroke: **{deployed_weight:.4f} kg**")
+        st.write(f"Scrap Percentage: **{scrap_percent:.2f} %**")
 
-Carriage Allowance: {carriage_allowance} mm  
-Stripping Allowance: {stripping_allowance} mm  
+        # -----------------------------
+        # STRIP LAYOUT VISUAL
+        # -----------------------------
 
-Required Tonnage: {tonnage:.2f} Tons  
-
-Deployed Weight: {deployed_weight:.4f} kg  
-Part Weight: {part_weight:.4f} kg  
-
-Scrap Weight: {scrap_weight:.4f} kg  
-Scrap Percentage: {scrap_percent:.2f} %
-"""
-
-        # -------------------------
-        # STRIP IMAGE
-        # -------------------------
         fig, ax = plt.subplots()
-        ax.add_patch(plt.Rectangle((0, 0), pitch, strip_width, fill=False))
-        ax.add_patch(plt.Rectangle(
-            (stripping_allowance/2, carriage_allowance),
-            length,
-            width,
-            fill=False
-        ))
-        ax.set_title("Strip Layout")
+
+        # Outer strip
+        ax.add_patch(
+            plt.Rectangle((0, 0), deployed_width, deployed_length,
+                          fill=False, linewidth=2)
+        )
+
+        # Carriage zones (Left & Right)
+        ax.add_patch(
+            plt.Rectangle((0, 0), carriage_allowance, deployed_length,
+                          color="green", alpha=0.3)
+        )
+        ax.add_patch(
+            plt.Rectangle((deployed_width - carriage_allowance, 0),
+                          carriage_allowance, deployed_length,
+                          color="green", alpha=0.3)
+        )
+
+        # Stripping zones (Top & Bottom)
+        ax.add_patch(
+            plt.Rectangle((0, 0), deployed_width, stripping_allowance,
+                          color="blue", alpha=0.2)
+        )
+        ax.add_patch(
+            plt.Rectangle((0, deployed_length - stripping_allowance),
+                          deployed_width, stripping_allowance,
+                          color="blue", alpha=0.2)
+        )
+
+        # Part in center
+        ax.add_patch(
+            plt.Rectangle(
+                (carriage_allowance, stripping_allowance),
+                width,
+                pitch,
+                fill=False,
+                linewidth=2
+            )
+        )
+
+        ax.set_aspect('equal')
+        ax.set_title("Strip Layout Representation")
+        ax.invert_yaxis()
         st.pyplot(fig)
 
-    st.session_state.messages.append({"role": "assistant", "content": response})
-    st.rerun()
+        # -----------------------------
+        # EXPORT TO EXCEL
+        # -----------------------------
+
+        result_data = {
+            "Material": [material],
+            "Length (mm)": [length],
+            "Width (mm)": [width],
+            "Thickness (mm)": [thickness],
+            "Tonnage (Tons)": [tonnage],
+            "Deployed Weight (kg)": [deployed_weight],
+            "Net Weight (kg)": [part_net_weight],
+            "Scrap %": [scrap_percent]
+        }
+
+        df = pd.DataFrame(result_data)
+
+        st.download_button(
+            label="📥 Export Results to Excel",
+            data=df.to_csv(index=False),
+            file_name="sheet_metal_results.csv",
+            mime="text/csv"
+        )
