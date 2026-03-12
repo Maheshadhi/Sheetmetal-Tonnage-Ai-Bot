@@ -14,6 +14,10 @@ st.header("Enter Part Details")
 # STEP FILE INPUT
 # -----------------------------
 
+# -----------------------------
+# STEP FILE INPUT
+# -----------------------------
+
 st.subheader("Upload 3D Model (STEP/STP)")
 
 step_file = st.file_uploader(
@@ -34,14 +38,24 @@ if step_file and not manual_override:
         tmp.write(step_file.getbuffer())
         temp_path = tmp.name
 
-    auto_length, auto_width, auto_thickness, auto_volume = extract_step_dimensions(temp_path)
+    try:
 
-    st.success("3D Model Loaded Successfully")
+        auto_length, auto_width, auto_thickness, auto_volume = extract_step_dimensions(temp_path)
 
-    st.write(f"Detected Length : {auto_length:.2f} mm")
-    st.write(f"Detected Width : {auto_width:.2f} mm")
-    st.write(f"Detected Thickness : {auto_thickness:.2f} mm")
+        st.success("3D Model Loaded Successfully")
 
+        st.write(f"Detected Length : {auto_length:.2f} mm")
+        st.write(f"Detected Width : {auto_width:.2f} mm")
+        st.write(f"Detected Thickness : {auto_thickness:.2f} mm")
+
+    except Exception as e:
+
+        st.warning("STEP file could not be processed in cloud environment. Please enter dimensions manually.")
+
+        auto_length = None
+        auto_width = None
+        auto_thickness = None
+        auto_volume = None
 # -----------------------------
 # INPUT SECTION
 # -----------------------------
@@ -287,4 +301,5 @@ if st.button("Calculate Results"):
         results.to_csv(index=False),
         file_name="sheet_metal_results.csv"
     )
+
 
