@@ -14,10 +14,6 @@ st.header("Enter Part Details")
 # STEP FILE INPUT
 # -----------------------------
 
-# -----------------------------
-# STEP FILE INPUT
-# -----------------------------
-
 st.subheader("Upload 3D Model (STEP/STP/STL)")
 
 step_file = st.file_uploader(
@@ -48,7 +44,7 @@ if step_file and not manual_override:
         st.write(f"Detected Width : {auto_width:.2f} mm")
         st.write(f"Detected Thickness : {auto_thickness:.2f} mm")
 
-    except Exception as e:
+    except Exception:
 
         st.warning("STEP file could not be processed in cloud environment. Please enter dimensions manually.")
 
@@ -56,6 +52,8 @@ if step_file and not manual_override:
         auto_width = None
         auto_thickness = None
         auto_volume = None
+
+
 # -----------------------------
 # INPUT SECTION
 # -----------------------------
@@ -111,21 +109,26 @@ shear_strength = shear_db[material]
 # NET WEIGHT
 # -----------------------------
 
-net_weight_grams = st.number_input(
-    "Part Net Weight (grams)",
-    min_value=0.0,
-    value=50.0
-)
-
 if auto_volume and not manual_override:
 
     volume_m3 = auto_volume / 1e9
     auto_weight = volume_m3 * density
     auto_weight_grams = auto_weight * 1000
 
-    st.info(f"Estimated Net Weight from 3D Model : {auto_weight_grams:.2f} grams")
+    st.success(f"Net Weight Calculated From 3D Model : {auto_weight_grams:.2f} grams")
 
-net_weight = net_weight_grams / 1000
+    net_weight = auto_weight
+
+else:
+
+    net_weight_grams = st.number_input(
+        "Part Net Weight (grams)",
+        min_value=0.0,
+        value=50.0
+    )
+
+    net_weight = net_weight_grams / 1000
+
 
 # -----------------------------
 # IMAGE UPLOAD
