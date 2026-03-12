@@ -21,8 +21,8 @@ st.header("Enter Part Details")
 st.subheader("Upload 3D Model (STEP/STP)")
 
 step_file = st.file_uploader(
-    "Upload STEP File",
-    type=["stp","step"]
+    "Upload 3D Model",
+    type=["stp","step","stl"]
 )
 
 manual_override = st.checkbox("Manual Enter Dimensions")
@@ -301,5 +301,6 @@ if st.button("Calculate Results"):
         results.to_csv(index=False),
         file_name="sheet_metal_results.csv"
     )
+
 
 
