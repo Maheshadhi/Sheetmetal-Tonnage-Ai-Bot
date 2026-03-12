@@ -18,7 +18,7 @@ st.header("Enter Part Details")
 # STEP FILE INPUT
 # -----------------------------
 
-st.subheader("Upload 3D Model (STEP/STP)")
+st.subheader("Upload 3D Model (STEP/STP/STL)")
 
 step_file = st.file_uploader(
     "Upload 3D Model",
@@ -301,6 +301,7 @@ if st.button("Calculate Results"):
         results.to_csv(index=False),
         file_name="sheet_metal_results.csv"
     )
+
 
 
 
