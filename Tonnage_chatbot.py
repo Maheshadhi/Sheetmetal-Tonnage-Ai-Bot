@@ -2,7 +2,8 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import pandas as pd
 import tempfile
-from step_reader import extract_step_dimensions
+from stl import mesh
+import numpy as np
 
 st.set_page_config(page_title="AI Sheet Metal Costing Assistant", layout="wide")
 
@@ -11,14 +12,14 @@ st.title("🤖 AI Sheet Metal Costing Assistant")
 st.header("Enter Part Details")
 
 # -----------------------------
-# STEP FILE INPUT
+# STL FILE INPUT
 # -----------------------------
 
-st.subheader("Upload 3D Model (STEP/STP/STL)")
+st.subheader("Upload 3D Model (STL)")
 
-step_file = st.file_uploader(
-    "Upload 3D Model",
-    type=["stp","step","stl"]
+stl_file = st.file_uploader(
+    "Upload STL File",
+    type=["stl"]
 )
 
 manual_override = st.checkbox("Manual Enter Dimensions")
@@ -28,31 +29,34 @@ auto_width = None
 auto_thickness = None
 auto_volume = None
 
-if step_file and not manual_override:
+if stl_file and not manual_override:
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".step") as tmp:
-        tmp.write(step_file.getbuffer())
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".stl") as tmp:
+        tmp.write(stl_file.getbuffer())
         temp_path = tmp.name
 
-    try:
+    # Load STL
+    your_mesh = mesh.Mesh.from_file(temp_path)
 
-        auto_length, auto_width, auto_thickness, auto_volume = extract_step_dimensions(temp_path)
+    # Get all vertices
+    points = your_mesh.vectors.reshape(-1, 3)
 
-        st.success("3D Model Loaded Successfully")
+    # Bounding box
+    min_vals = np.min(points, axis=0)
+    max_vals = np.max(points, axis=0)
 
-        st.write(f"Detected Length : {auto_length:.2f} mm")
-        st.write(f"Detected Width : {auto_width:.2f} mm")
-        st.write(f"Detected Thickness : {auto_thickness:.2f} mm")
+    auto_length = max_vals[0] - min_vals[0]
+    auto_width = max_vals[1] - min_vals[1]
+    auto_thickness = max_vals[2] - min_vals[2]
 
-    except Exception:
+    # Volume (in mm³)
+    auto_volume = your_mesh.get_mass_properties()[0]
 
-        st.warning("STEP file could not be processed in cloud environment. Please enter dimensions manually.")
+    st.success("STL Model Loaded Successfully")
 
-        auto_length = None
-        auto_width = None
-        auto_thickness = None
-        auto_volume = None
-
+    st.write(f"Detected Length : {auto_length:.2f} mm")
+    st.write(f"Detected Width : {auto_width:.2f} mm")
+    st.write(f"Detected Thickness : {auto_thickness:.2f} mm")
 
 # -----------------------------
 # INPUT SECTION
@@ -109,26 +113,21 @@ shear_strength = shear_db[material]
 # NET WEIGHT
 # -----------------------------
 
+net_weight_grams = st.number_input(
+    "Part Net Weight (grams)",
+    min_value=0.0,
+    value=50.0
+)
+
 if auto_volume and not manual_override:
 
     volume_m3 = auto_volume / 1e9
     auto_weight = volume_m3 * density
     auto_weight_grams = auto_weight * 1000
 
-    st.success(f"Net Weight Calculated From 3D Model : {auto_weight_grams:.2f} grams")
+    st.info(f"Estimated Net Weight from 3D Model : {auto_weight_grams:.2f} grams")
 
-    net_weight = auto_weight
-
-else:
-
-    net_weight_grams = st.number_input(
-        "Part Net Weight (grams)",
-        min_value=0.0,
-        value=50.0
-    )
-
-    net_weight = net_weight_grams / 1000
-
+net_weight = net_weight_grams / 1000
 
 # -----------------------------
 # IMAGE UPLOAD
@@ -304,7 +303,3 @@ if st.button("Calculate Results"):
         results.to_csv(index=False),
         file_name="sheet_metal_results.csv"
     )
-
-
-
-
