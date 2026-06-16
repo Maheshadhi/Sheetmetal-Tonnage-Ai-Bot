@@ -1,6 +1,8 @@
 streamlit
 numpy
-numpy-stl
-matplotlib
 pandas
+matplotlib
+numpy-stl
+fpdf2
+xlsxwriter
 
